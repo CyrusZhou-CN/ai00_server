@@ -22,6 +22,7 @@ simple_logger = { version = "5.0.0", features = ["stderr"] }
 tempfile = "3.6"
 toml = "0.8.6"
 zip-extract = "0.1"
+fastembed = "3"
 
 [dependencies.ai00-core]
 workspace = true
