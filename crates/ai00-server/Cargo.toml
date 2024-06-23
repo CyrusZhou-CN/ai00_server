@@ -24,6 +24,10 @@ toml = "0.8.6"
 zip-extract = "0.1"
 fastembed = "3"
 
+[patch.crates-io]
+hf-hub = {path = "../../../hf-hub"}
+# hf-hub = {git = "https://github.com/cgisky1980/hf-hub"}
+
 [dependencies.ai00-core]
 workspace = true
 

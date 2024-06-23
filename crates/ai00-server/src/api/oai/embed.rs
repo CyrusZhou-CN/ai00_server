@@ -5,7 +5,7 @@ use salvo::{
 use serde::{Deserialize, Serialize};
 
 use crate::types::Array;
-use std::path::Path;
+use std::env;
 use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 
 trait EmbeddingModelExt {
@@ -15,7 +15,6 @@ trait EmbeddingModelExt {
 impl EmbeddingModelExt for EmbeddingModel {
     fn from_name(name: &str) -> Self {
         match name {
-
             // Add other models as needed
             /*
             /// sentence-transformers/all-MiniLM-L6-v2
@@ -59,7 +58,6 @@ impl EmbeddingModelExt for EmbeddingModel {
             /// Quantized mixedbread-ai/mxbai-embed-large-v1
             MxbaiEmbedLargeV1Q,
             */
-            // 帮我把这些模型名字填进去
 
             "AllMiniLML6V2" => EmbeddingModel::AllMiniLML6V2,
             "AllMiniLML6V2Q" => EmbeddingModel::AllMiniLML6V2Q,
@@ -73,7 +71,7 @@ impl EmbeddingModelExt for EmbeddingModel {
             "NomicEmbedTextV15" => EmbeddingModel::NomicEmbedTextV15,
             "NomicEmbedTextV15Q" => EmbeddingModel::NomicEmbedTextV15Q,
             "ParaphraseMLMiniLML12V2" => EmbeddingModel::ParaphraseMLMiniLML12V2,
-            "ParaphraseMLMiniLML12V2Q" => EmbeddingModel::ParaphraseMLMiniLML12V2,
+            "ParaphraseMLMiniLML12V2Q" => EmbeddingModel::ParaphraseMLMiniLML12V2Q,
             "ParaphraseMLMpnetBaseV2" => EmbeddingModel::ParaphraseMLMpnetBaseV2,
             "BGESmallZHV15" => EmbeddingModel::BGESmallZHV15,
             "MultilingualE5Small" => EmbeddingModel::MultilingualE5Small,
@@ -81,9 +79,6 @@ impl EmbeddingModelExt for EmbeddingModel {
             "MultilingualE5Large" => EmbeddingModel::MultilingualE5Large,
             "MxbaiEmbedLargeV1" => EmbeddingModel::MxbaiEmbedLargeV1,
             "MxbaiEmbedLargeV1Q" => EmbeddingModel::MxbaiEmbedLargeV1Q,
-
-
-
             _ => panic!("Unsupported model name"),
         }
     }
@@ -121,14 +116,17 @@ pub async fn embeds(
 
     let future = async move {
         let model_name = req.mode_name.clone();
-
+        env::set_var("HF_ENDPOINT", "https://hf-mirror.com");
+        env::set_var("HF_HOME", "./assets/models/hf_hub");
         let model = TextEmbedding::try_new(InitOptions {
             model_name: EmbeddingModel::from_name(&model_name),
             show_download_progress: true,
-            cache_dir: Path::new("assets\\models\\embed").to_path_buf(),
+            //cache_dir: Path::new("assets\\models\\embed").to_path_buf(),
             ..Default::default()
         }).expect("Failed to initialize model");
 
+ 
+        
         let embedding_result = model
             .embed(Vec::from(req.input.clone()), None)
             .expect("Failed to get embedding"); // Use expect to handle error
