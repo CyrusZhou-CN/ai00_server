@@ -336,11 +336,12 @@ impl TryFrom<StateValue> for InitState {
     }
 }
 
-fn list_adapters() -> AdapterList {
+async fn list_adapters() -> AdapterList {
     let backends = Backends::all();
     let instance = web_rwkv::wgpu::Instance::default();
     let list = instance
         .enumerate_adapters(backends)
+        .await
         .into_iter()
         .map(|adapter| adapter.get_info())
         .map(|info| format!("{} ({:?})", info.name, info.backend))
@@ -356,6 +357,7 @@ async fn create_context(adapter: AdapterOption, info: &ModelInfo) -> Result<Cont
         AdapterOption::Economical => instance.adapter(PowerPreference::LowPower).await,
         AdapterOption::Manual(selection) => Ok(instance
             .enumerate_adapters(backends)
+            .await
             .into_iter()
             .nth(selection)
             .ok_or(ContextError::RequestAdapterFailed)?),
@@ -557,7 +559,7 @@ async fn load_runtime(
 async fn process(env: Arc<RwLock<Environment>>, request: ThreadRequest) -> Result<()> {
     match request {
         ThreadRequest::Adapter(sender) => {
-            let _ = sender.send(list_adapters());
+            let _ = sender.send(list_adapters().await);
         }
         ThreadRequest::Info(sender) => {
             let env = env.read().await;
