@@ -1178,7 +1178,7 @@ async fn softmax(
         let input = batches.iter().map(|batch| batch.input.clone()).collect();
         let output = web_rwkv::runtime::softmax::softmax(&context, input).await?;
 
-        for (batch, tensor) in batches.iter().zip_eq(output.into_iter()) {
+        for (batch, tensor) in batches.iter().zip_eq(output) {
             let _ = batch.sender.send(tensor);
         }
 
