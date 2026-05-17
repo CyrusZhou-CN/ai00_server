@@ -10,6 +10,7 @@ use salvo::{
     Depot, Writer,
 };
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinSet;
 
 use super::*;
 use crate::{
@@ -65,44 +66,29 @@ struct CompletionRequest {
     temperature: f32,
 }
 
-impl From<CompletionRequest> for GenerateRequest {
-    fn from(value: CompletionRequest) -> Self {
-        let CompletionRequest {
-            prompt,
-            state,
-            max_tokens,
-            stop,
-            sampler,
-            top_p,
-            top_k,
-            temperature,
-            bias,
-            bnf_schema,
-            ..
-        } = value;
-
-        let prompt = Vec::from(prompt).join("");
-        let stop = stop.into();
-        let bias = Arc::new(bias);
-        let sampler = match sampler {
-            Some(sampler) => sampler.into(),
+impl CompletionRequest {
+    fn to_generate_request(&self, prompt: String) -> GenerateRequest {
+        let stop: Vec<String> = self.stop.clone().into();
+        let bias = Arc::new(self.bias.clone());
+        let sampler = match &self.sampler {
+            Some(sampler) => sampler.clone().into(),
             None => SamplerParams::Nucleus(NucleusParams {
-                top_p,
-                top_k,
-                temperature,
+                top_p: self.top_p,
+                top_k: self.top_k,
+                temperature: self.temperature,
                 ..Default::default()
             })
             .into(),
         };
-        let state = state.into();
+        let state = self.state.clone().into();
 
-        Self {
+        GenerateRequest {
             prompt,
-            max_tokens,
+            max_tokens: self.max_tokens,
             stop,
             sampler,
             bias,
-            bnf_schema,
+            bnf_schema: self.bnf_schema.clone(),
             state,
             ..Default::default()
         }
@@ -191,43 +177,61 @@ async fn respond_one(depot: &mut Depot, request: CompletionRequest, res: &mut Re
     let info = request_info(sender.clone(), SLEEP).await;
     let model_name = info.reload.model_path.to_string_lossy().into_owned();
 
-    let (token_sender, token_receiver) = flume::unbounded();
-    let request = Box::new(request.into());
-    let _ = sender.send(ThreadRequest::Generate {
-        request,
-        tokenizer: info.tokenizer,
-        sender: token_sender,
-    });
+    let prompts: Vec<String> = Vec::from(request.prompt.clone());
+    let tokenizer = info.tokenizer;
 
-    let mut token_counter = TokenCounter::default();
-    let mut finish_reason = FinishReason::Null;
-    let mut text = String::new();
-    let mut stream = token_receiver.into_stream();
+    let mut set = JoinSet::new();
+    for (index, prompt) in prompts.into_iter().enumerate() {
+        let req = request.to_generate_request(prompt);
+        let sender = sender.clone();
+        let tokenizer = tokenizer.clone();
+        set.spawn(async move {
+            let (token_sender, token_receiver) = flume::unbounded();
+            let _ = sender.send(ThreadRequest::Generate {
+                request: Box::new(req),
+                tokenizer,
+                sender: token_sender,
+            });
 
-    while let Some(token) = stream.next().await {
-        match token {
-            Token::Start => {}
-            Token::Content(token) => {
-                text += &token;
+            let mut finish_reason = FinishReason::Null;
+            let mut text = String::new();
+            let mut stream = token_receiver.into_stream();
+
+            while let Some(token) = stream.next().await {
+                match token {
+                    Token::Start => {}
+                    Token::Content(token) => {
+                        text += &token;
+                    }
+                    Token::Stop(reason, _) => {
+                        finish_reason = reason;
+                        break;
+                    }
+                    _ => unreachable!(),
+                }
             }
-            Token::Stop(reason, counter) => {
-                finish_reason = reason;
-                token_counter = counter;
-                break;
+
+            CompletionChoice {
+                text,
+                index,
+                finish_reason,
             }
-            _ => unreachable!(),
+        });
+    }
+
+    let mut choices = Vec::new();
+    while let Some(result) = set.join_next().await {
+        if let Ok(choice) = result {
+            choices.push(choice);
         }
     }
+    choices.sort_by_key(|c| c.index);
 
     let json = Json(CompletionResponse {
         object: "text_completion".into(),
         model: model_name,
-        choices: vec![CompletionChoice {
-            text,
-            index: 0,
-            finish_reason,
-        }],
-        counter: token_counter,
+        choices,
+        counter: TokenCounter::default(),
     });
     res.render(json);
 }
@@ -237,26 +241,47 @@ async fn respond_stream(depot: &mut Depot, request: CompletionRequest, res: &mut
     let info = request_info(sender.clone(), SLEEP).await;
     let model_name = info.reload.model_path.to_string_lossy().into_owned();
 
-    let (token_sender, token_receiver) = flume::unbounded();
-    let request = Box::new(request.into());
-    let _ = sender.send(ThreadRequest::Generate {
-        request,
-        tokenizer: info.tokenizer,
-        sender: token_sender,
-    });
+    let prompts: Vec<String> = Vec::from(request.prompt.clone());
+    let tokenizer = info.tokenizer;
 
-    let stream = token_receiver.into_stream().skip(1).map(move |token| {
+    let (tx, rx) = flume::unbounded::<(usize, Token)>();
+
+    for (index, prompt) in prompts.into_iter().enumerate() {
+        let req = request.to_generate_request(prompt);
+        let sender = sender.clone();
+        let tokenizer = tokenizer.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            let (token_sender, token_receiver) = flume::unbounded();
+            let _ = sender.send(ThreadRequest::Generate {
+                request: Box::new(req),
+                tokenizer,
+                sender: token_sender,
+            });
+
+            let mut stream = token_receiver.into_stream();
+            while let Some(token) = stream.next().await {
+                if tx.send((index, token)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+
+    let stream = rx.into_stream().map(move |(index, token)| {
         let choice = match token {
             Token::Content(token) => PartialCompletionChoice {
                 delta: PartialCompletionRecord::Content(token),
+                index,
                 ..Default::default()
             },
             Token::Stop(finish_reason, _) => PartialCompletionChoice {
+                index,
                 finish_reason,
                 ..Default::default()
             },
             Token::Done => return Ok(SseEvent::default().text("[DONE]")),
-            _ => unreachable!(),
+            _ => return Ok(SseEvent::default()),
         };
 
         match serde_json::to_string(&PartialCompletionResponse {
