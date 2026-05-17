@@ -1,5 +1,12 @@
 # PR 历史记录
 
+## v0.7.0 发布 (2026-05-17)
+- 合并: PR #168 + PR #169
+- 核心功能:
+  - web-rwkv 升级至 0.10.20
+  - /v1/completions 正式支持批量 prompt 输入（每个 prompt 独立输出，多 choices 返回）
+- 标签: [v0.7.0](https://github.com/Ai00-X/ai00_server/releases/tag/v0.7.0)
+
 ## PR #168: update web-rwkv to 0.10.20 (已合并)
 - 日期: 2026-05-17
 - 分支: `update-webrwkv`
