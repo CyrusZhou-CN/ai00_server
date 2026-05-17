@@ -177,7 +177,7 @@ async fn respond_one(depot: &mut Depot, request: CompletionRequest, res: &mut Re
     let info = request_info(sender.clone(), SLEEP).await;
     let model_name = info.reload.model_path.to_string_lossy().into_owned();
 
-    let prompts: Vec<String> = Vec::from(request.prompt);
+    let prompts: Vec<String> = Vec::from(request.prompt.clone());
     let tokenizer = info.tokenizer;
 
     let mut set = JoinSet::new();
@@ -241,7 +241,7 @@ async fn respond_stream(depot: &mut Depot, request: CompletionRequest, res: &mut
     let info = request_info(sender.clone(), SLEEP).await;
     let model_name = info.reload.model_path.to_string_lossy().into_owned();
 
-    let prompts: Vec<String> = Vec::from(request.prompt);
+    let prompts: Vec<String> = Vec::from(request.prompt.clone());
     let tokenizer = info.tokenizer;
 
     let (tx, rx) = flume::unbounded::<(usize, Token)>();
