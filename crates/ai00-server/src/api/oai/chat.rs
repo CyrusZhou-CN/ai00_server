@@ -1,8 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use ai00_core::{
-    FinishReason, GenerateRequest, InputState, ThreadRequest, Token, TokenCounter, MAX_TOKENS,
-};
+use ai00_core::{FinishReason, GenerateRequest, InputState, ThreadRequest, Token, TokenCounter};
 use derivative::Derivative;
 use futures_util::StreamExt;
 use itertools::Itertools;
