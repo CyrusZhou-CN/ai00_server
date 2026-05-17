@@ -67,41 +67,28 @@ struct CompletionRequest {
 }
 
 impl CompletionRequest {
-    fn into_generate_request(self, prompt: String) -> GenerateRequest {
-        let CompletionRequest {
-            state,
-            max_tokens,
-            stop,
-            sampler,
-            top_p,
-            top_k,
-            temperature,
-            bias,
-            bnf_schema,
-            ..
-        } = self;
-
-        let stop = stop.into();
-        let bias = Arc::new(bias);
-        let sampler = match sampler {
-            Some(sampler) => sampler.into(),
+    fn to_generate_request(&self, prompt: String) -> GenerateRequest {
+        let stop: Vec<String> = self.stop.clone().into();
+        let bias = Arc::new(self.bias.clone());
+        let sampler = match &self.sampler {
+            Some(sampler) => sampler.clone().into(),
             None => SamplerParams::Nucleus(NucleusParams {
-                top_p,
-                top_k,
-                temperature,
+                top_p: self.top_p,
+                top_k: self.top_k,
+                temperature: self.temperature,
                 ..Default::default()
             })
             .into(),
         };
-        let state = state.into();
+        let state = self.state.clone().into();
 
         GenerateRequest {
             prompt,
-            max_tokens,
+            max_tokens: self.max_tokens,
             stop,
             sampler,
             bias,
-            bnf_schema,
+            bnf_schema: self.bnf_schema.clone(),
             state,
             ..Default::default()
         }
@@ -195,7 +182,7 @@ async fn respond_one(depot: &mut Depot, request: CompletionRequest, res: &mut Re
 
     let mut set = JoinSet::new();
     for (index, prompt) in prompts.into_iter().enumerate() {
-        let req = request.into_generate_request(prompt);
+        let req = request.to_generate_request(prompt);
         let sender = sender.clone();
         let tokenizer = tokenizer.clone();
         set.spawn(async move {
@@ -260,7 +247,7 @@ async fn respond_stream(depot: &mut Depot, request: CompletionRequest, res: &mut
     let (tx, rx) = flume::unbounded::<(usize, Token)>();
 
     for (index, prompt) in prompts.into_iter().enumerate() {
-        let req = request.into_generate_request(prompt);
+        let req = request.to_generate_request(prompt);
         let sender = sender.clone();
         let tokenizer = tokenizer.clone();
         let tx = tx.clone();
