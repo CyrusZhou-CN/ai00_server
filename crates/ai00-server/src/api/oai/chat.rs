@@ -184,7 +184,6 @@ impl From<ChatRequest> for GenerateRequest {
             .replace("{user}", &user);
         let prompt = format!("{prompt}{sep}{prefix}");
 
-        let max_tokens = max_tokens.min(MAX_TOKENS);
         let stop = stop.into();
         let bias = Arc::new(bias);
         let sampler = match sampler {
