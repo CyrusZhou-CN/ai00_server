@@ -1,8 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use ai00_core::{
-    FinishReason, GenerateRequest, InputState, ThreadRequest, Token, TokenCounter, MAX_TOKENS,
-};
+use ai00_core::{FinishReason, GenerateRequest, InputState, ThreadRequest, Token, TokenCounter};
 use derivative::Derivative;
 use futures_util::StreamExt;
 use salvo::{
@@ -84,7 +82,6 @@ impl From<CompletionRequest> for GenerateRequest {
         } = value;
 
         let prompt = Vec::from(prompt).join("");
-        let max_tokens = max_tokens.min(MAX_TOKENS);
         let stop = stop.into();
         let bias = Arc::new(bias);
         let sampler = match sampler {
